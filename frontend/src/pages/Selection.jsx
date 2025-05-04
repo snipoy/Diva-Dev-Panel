@@ -1,35 +1,108 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CircleStackIcon, ServerIcon } from '@heroicons/react/24/outline';
 import DashboardLayout from '../components/DashboardLayout';
-
-const cards = [
-  {
-    name: 'Container Status',
-    description: 'Monitor Docker containers and system resources',
-    icon: CircleStackIcon,
-    href: '/containers',
-    amount: '3 Containers',
-    color: 'bg-indigo-600'
-  },
-  {
-    name: 'Bot Status',
-    description: 'View Diva bot shards and performance metrics',
-    icon: ServerIcon,
-    href: '/bot-status',
-    amount: '5 Shards',
-    color: 'bg-indigo-600'
-  }
-];
-
-const stats = [
-  { name: 'Total Containers', value: '12', icon: CircleStackIcon },
-  { name: 'Active Containers', value: '8', icon: CircleStackIcon },
-  { name: 'Total Memory Usage', value: '4.2 GB', icon: ServerIcon },
-  { name: 'CPU Usage', value: '23%', icon: ServerIcon }
-];
+import { pterodactylApi } from '../services/pterodactylApi';
 
 export default function Selection() {
   const navigate = useNavigate();
+  const [serverStats, setServerStats] = useState({
+    totalServers: 0,
+    runningServers: 0,
+    totalMemory: 0,
+    totalCpu: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await pterodactylApi.getServers();
+        const serversData = response.data.data;
+        
+        // Get detailed information for each server
+        const detailedServers = await Promise.all(
+          serversData.map(async (server) => {
+            try {
+              const resources = await pterodactylApi.getServerResources(server.attributes.identifier);
+              return {
+                ...server.attributes,
+                resources: resources.data
+              };
+            } catch (err) {
+              console.error(`Error fetching resources for server ${server.attributes.name}:`, err);
+              return {
+                ...server.attributes,
+                resources: null
+              };
+            }
+          })
+        );
+
+        // Calculate stats
+        const stats = {
+          totalServers: detailedServers.length,
+          runningServers: detailedServers.filter(s => s.resources?.attributes?.state === 'running').length,
+          totalMemory: detailedServers.reduce((acc, server) => 
+            acc + (server.resources?.attributes?.memory_bytes || 0), 0),
+          totalCpu: detailedServers.reduce((acc, server) => 
+            acc + (server.resources?.attributes?.cpu_absolute || 0), 0)
+        };
+
+        setServerStats(stats);
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching server stats:', err);
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000); // Refresh every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
+
+  const cards = [
+    {
+      name: 'Server Status',
+      description: 'Monitor your Pterodactyl servers and resources',
+      icon: CircleStackIcon,
+      href: '/containers',
+      amount: `${serverStats.totalServers} Servers`,
+      color: 'bg-indigo-600'
+    },
+    {
+      name: 'Bot Status',
+      description: 'View Diva bot shards and performance metrics',
+      icon: ServerIcon,
+      href: '/bot-status',
+      amount: '5 Shards',
+      color: 'bg-indigo-600'
+    }
+  ];
+
+  const stats = [
+    { 
+      name: 'Total Servers', 
+      value: serverStats.totalServers.toString(), 
+      icon: CircleStackIcon 
+    },
+    { 
+      name: 'Active Servers', 
+      value: serverStats.runningServers.toString(), 
+      icon: CircleStackIcon 
+    },
+    { 
+      name: 'Total Memory Usage', 
+      value: `${Math.round(serverStats.totalMemory / 1024 / 1024 / 1024 * 100) / 100} GB`, 
+      icon: ServerIcon 
+    },
+    { 
+      name: 'Average CPU Usage', 
+      value: `${Math.round(serverStats.totalCpu / serverStats.totalServers || 0)}%`, 
+      icon: ServerIcon 
+    }
+  ];
 
   return (
     <DashboardLayout>
@@ -58,7 +131,9 @@ export default function Selection() {
                 <p className="ml-8 truncate text-xs font-medium text-gray-500">{stat.name}</p>
               </dt>
               <dd className="ml-8 flex items-baseline">
-                <p className="text-sm font-medium text-gray-900">{stat.value}</p>
+                <p className="text-sm font-medium text-gray-900">
+                  {loading ? '...' : stat.value}
+                </p>
               </dd>
             </div>
           ))}
