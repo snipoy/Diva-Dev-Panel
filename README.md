@@ -42,11 +42,7 @@ As the development for this dashboard is no longer active, contributions will no
 
 1. Clone the repository:
 ```bash
-<<<<<<< HEAD
 git clone https://github.com/snipoy/Diva-Dev-Panel.git
-=======
-git clone https://github.com/snipoy/Diva-Developer-Panel.git
->>>>>>> 477eb20 (Initial commit)
 cd diva-dev-status-dashboard
 ```
 
